@@ -1,137 +1,123 @@
-# ===============================
-# app.py
-# ===============================
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
+import matplotlib.pyplot as plt
 
-# ===============================
-# App Meta
-# ===============================
-APP_TITLE = "StockXplore: Big Data-Powered VIKOR System"
-APP_TAGLINE = "VIKOR ranking for smarter stock screening."
+st.set_page_config(page_title="StockXplore VIKOR", layout="wide")
+st.title("📊 StockXplore: VIKOR Stock Ranking System")
 
-st.set_page_config(page_title=APP_TITLE, layout="wide", page_icon="📈")
-st.title(APP_TITLE)
-st.write(APP_TAGLINE)
+# -----------------------------
+# Upload CSV
+# -----------------------------
+uploaded_file = st.file_uploader("📂 Upload CSV (First column = Alternatives, rest = numeric criteria)", type="csv")
 
-# ===============================
-# Load / Sample Data
-# ===============================
-def load_sample_data(n=10, seed=42):
-    np.random.seed(seed)
-    data = {
-        "Name": [f"Company {i+1}" for i in range(n)],
-        "EPS":  np.round(np.random.uniform(0.5, 6.0, n), 2),
-        "DPS":  np.round(np.random.uniform(0.0, 3.0, n), 2),
-        "NTA":  np.round(np.random.uniform(0.5, 8.0, n), 2),
-        "PE":   np.round(np.random.uniform(6.0, 40.0, n), 2),
-        "DY":   np.round(np.random.uniform(0.0, 12.0, n), 2),
-        "ROE":  np.round(np.random.uniform(0.0, 30.0, n), 2),
-        "PTBV": np.round(np.random.uniform(0.5, 5.0, n), 2),
-    }
-    return pd.DataFrame(data)
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
+    st.subheader("📁 Raw Data")
+    st.dataframe(df)
 
-uploaded = st.file_uploader("Upload CSV (must have 'Name' column)", type="csv")
-if uploaded:
-    df_raw = pd.read_csv(uploaded)
-else:
-    st.info("Using sample dataset")
-    df_raw = load_sample_data()
+    # -----------------------------
+    # Auto-detect name column
+    # -----------------------------
+    # Pick first non-numeric column as Name
+    name_col = None
+    for col in df.columns:
+        if not pd.api.types.is_numeric_dtype(df[col]):
+            name_col = col
+            break
 
-# Clean column names
-df_raw.columns = df_raw.columns.str.strip()
+    if name_col is None:
+        st.error("No non-numeric column found for alternative names. Please include one.")
+        st.stop()
 
-# Check Name column
-if "Name" not in df_raw.columns:
-    st.error("Your dataset must have a 'Name' column for alternatives.")
-    st.stop()
+    st.markdown(f"**Detected alternatives column:** `{name_col}`")
 
-st.subheader("Dataset Preview")
-st.dataframe(df_raw.head(20))
+    # Numeric criteria
+    criteria = [c for c in df.columns if c != name_col and pd.api.types.is_numeric_dtype(df[c])]
+    if not criteria:
+        st.error("No numeric criteria found.")
+        st.stop()
 
-# Numeric criteria
-numeric_cols = df_raw.select_dtypes(include=[np.number]).columns.tolist()
-criteria = st.multiselect("Select numeric criteria", options=numeric_cols, default=numeric_cols)
+    # -----------------------------
+    # Step 1: Input weights
+    # -----------------------------
+    st.subheader("Step 1 — Set weights for each criterion")
+    weights = []
+    for c in criteria:
+        w = st.number_input(f"Weight: {c}", min_value=0.0, value=1.0, step=0.1)
+        weights.append(w)
+    weights = np.array(weights)
+    weights = weights / weights.sum() if weights.sum() != 0 else np.ones_like(weights) / len(weights)
 
-if len(criteria) == 0:
-    st.warning("Select at least one criterion.")
-    st.stop()
+    # Step 2: Mark benefit/cost
+    st.subheader("Step 2 — Mark Benefit or Cost")
+    benefit_flags = []
+    for c in criteria:
+        choice = st.radio(f"{c}", ["Benefit (higher better)", "Cost (lower better)"], index=0, key=f"bc_{c}")
+        benefit_flags.append(choice.startswith("Benefit"))
 
-# -------------------------------
-# Step 1: Benefit / Cost
-# -------------------------------
-st.subheader("Mark Benefit / Cost")
-benefit_dict = {}
-for c in criteria:
-    benefit_dict[c] = st.radio(f"{c}:", ["Benefit (higher better)", "Cost (lower better)"], index=0) == "Benefit (higher better)"
+    # Step 3: VIKOR parameter v
+    v_param = st.slider("Step 3 — VIKOR v (compromise factor)", 0.0, 1.0, 0.5, 0.05)
 
-# -------------------------------
-# Step 2: Input Weights
-# -------------------------------
-st.subheader("Set Criteria Weights")
-weights_dict = {}
-cols = st.columns(min(4, len(criteria)))
-for i, c in enumerate(criteria):
-    with cols[i % len(cols)]:
-        weights_dict[c] = st.number_input(f"Weight: {c}", min_value=0.0, value=1.0, step=0.1)
+    # -----------------------------
+    # Step 4: Compute VIKOR
+    # -----------------------------
+    df_numeric = df[[name_col] + criteria].copy()
 
-# Normalize weights
-w_array = np.array(list(weights_dict.values()), dtype=float)
-if w_array.sum() != 0:
-    w_array = w_array / w_array.sum()
-else:
-    w_array = np.ones(len(criteria)) / len(criteria)
-weights_dict = dict(zip(criteria, w_array))
-
-# -------------------------------
-# Step 3: VIKOR Calculation
-# -------------------------------
-def vikor(df, criteria, benefit_dict, weights_dict, v=0.5):
-    X = df[criteria].values.astype(float)
-    f_star = np.array([X[:,i].max() if benefit_dict[criteria[i]] else X[:,i].min() for i in range(len(criteria))])
-    f_minus = np.array([X[:,i].min() if benefit_dict[criteria[i]] else X[:,i].max() for i in range(len(criteria))])
-    
+    X = df_numeric[criteria].values.astype(float)
+    m, n = X.shape
     D = np.zeros_like(X)
-    for j in range(len(criteria)):
-        denom = f_star[j] - f_minus[j] if f_star[j] != f_minus[j] else 1e-9
-        if benefit_dict[criteria[j]]:
-            D[:,j] = (f_star[j] - X[:,j]) / denom
+    f_star = np.zeros(n)
+    f_minus = np.zeros(n)
+
+    for j in range(n):
+        col = X[:, j]
+        if benefit_flags[j]:
+            f_star[j] = np.max(col)
+            f_minus[j] = np.min(col)
+            denom = f_star[j] - f_minus[j]
+            D[:, j] = (f_star[j] - col) / denom if denom != 0 else 0
         else:
-            D[:,j] = (X[:,j] - f_star[j]) / denom
-    
-    w = np.array([weights_dict[c] for c in criteria])
-    S = np.dot(D, w)
-    R = np.max(D * w, axis=1)
-    
+            f_star[j] = np.min(col)
+            f_minus[j] = np.max(col)
+            denom = f_minus[j] - f_star[j]
+            D[:, j] = (col - f_star[j]) / denom if denom != 0 else 0
+
+    S = (D * weights).sum(axis=1)
+    R = (D * weights).max(axis=1)
     S_star, S_minus = S.min(), S.max()
     R_star, R_minus = R.min(), R.max()
-    
-    Q = v * (S - S_star) / (S_minus - S_star + 1e-9) + (1 - v) * (R - R_star) / (R_minus - R_star + 1e-9)
-    
-    df_result = df[["Name"]].copy()
-    df_result["S"] = S
-    df_result["R"] = R
-    df_result["Q"] = Q
-    df_result["Rank"] = df_result["Q"].rank(method="min").astype(int)
-    df_result = df_result.sort_values("Q")
-    
-    return df_result
+    Q = v_param * (S - S_star) / (S_minus - S_star + 1e-9) + (1 - v_param) * (R - R_star) / (R_minus - R_star + 1e-9)
 
-v = st.slider("VIKOR v (compromise factor)", 0.0, 1.0, 0.5, 0.05)
-if st.button("Run VIKOR"):
-    df_result = vikor(df_raw, criteria, benefit_dict, weights_dict, v=v)
-    
-    st.subheader("VIKOR Ranking")
+    df_result = pd.DataFrame({
+        name_col: df_numeric[name_col],
+        **{c: df_numeric[c] for c in criteria},
+        "S": S,
+        "R": R,
+        "Q": Q
+    })
+    df_result["Rank"] = df_result["Q"].rank(method="min").astype(int)
+    df_result = df_result.sort_values("Rank")
+
+    # -----------------------------
+    # Display results
+    # -----------------------------
+    st.subheader("🏁 VIKOR Ranking Results")
     st.dataframe(df_result)
-    
-    st.success(f"Best alternative: {df_result.iloc[0]['Name']}")
-    
-    # -------------------------------
-    # Step 4: Plotly Chart
-    # -------------------------------
-    st.subheader("Ranking Graph (Q Values)")
-    fig = px.bar(df_result, x="Name", y="Q", text="Q", title="VIKOR Ranking (Lower Q is Better)")
-    fig.update_layout(xaxis={'categoryorder':'total ascending'}, height=500)
-    st.plotly_chart(fig, use_container_width=True)
+
+    # -----------------------------
+    # Bar chart of Q values
+    # -----------------------------
+    st.subheader("📊 Q Value Ranking Chart")
+    plt.figure(figsize=(10, 6))
+    plt.bar(df_result[name_col], df_result["Q"], color='skyblue')
+    plt.xlabel("Alternative")
+    plt.ylabel("Q Value")
+    plt.title("VIKOR Ranking Based on Q Values (Lower is Better)")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    st.pyplot(plt)
+
+else:
+    st.info("Please upload a CSV file to start.")
+
