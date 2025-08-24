@@ -22,10 +22,6 @@ This app applies the **VIKOR (VlseKriterijumska Optimizacija I Kompromisno Resen
 > The lower the Q value, the better the alternative.
 """)
 
-
-st.set_page_config(page_title="StockXplore VIKOR", layout="wide")
-st.title("📊 StockXplore: VIKOR Stock Ranking System")
-
 # -----------------------------
 # Upload CSV
 # -----------------------------
