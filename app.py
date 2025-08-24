@@ -11,6 +11,7 @@ st.title("StockXplore VIKOR System")
 def load_sample_data(n=10):
     np.random.seed(42)
     data = {
+        "Nama": [f"Stock{i+1}" for i in range(n)],
         "EPS": np.round(np.random.uniform(0.5, 6.0, n), 2),
         "DPS": np.round(np.random.uniform(0.0, 3.0, n), 2),
         "NTA": np.round(np.random.uniform(0.5, 8.0, n), 2),
@@ -27,12 +28,6 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file)
 else:
     df = load_sample_data()
-
-# -----------------------------
-# Ensure alternatives column
-# -----------------------------
-if "Alternative" not in df.columns:
-    df.insert(0, "Alternative", [f"A{i+1}" for i in range(len(df))])
 
 st.subheader("Data Preview")
 st.dataframe(df)
@@ -115,16 +110,16 @@ if st.button("Run VIKOR"):
         st.dataframe(df_result)
 
         # Show best alternative
-        best_alt = df_result.iloc[0]["Alternative"]
+        best_alt = df_result.iloc[0]["Nama"]
         st.success(f"🏆 Best Alternative: {best_alt}")
 
         # -----------------------------
-        # Horizontal bar chart by rank
+        # Horizontal bar chart by VIKOR Q
         # -----------------------------
         chart = alt.Chart(df_result).mark_bar().encode(
-            y=alt.Y("Alternative:N", sort=df_result["Alternative"].tolist(), title="Alternative"),
+            y=alt.Y("Nama:N", sort=df_result["Nama"].tolist(), title="Nama"),
             x=alt.X("VIKOR_Q:Q", title="VIKOR Q (lower is better)"),
-            tooltip=["Alternative"] + criteria + ["VIKOR_Q", "Rank"]
+            tooltip=["Nama"] + criteria + ["VIKOR_Q", "Rank"]
         ).properties(height=400, title="VIKOR Ranking")
         st.altair_chart(chart, use_container_width=True)
 
