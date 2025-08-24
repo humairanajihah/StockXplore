@@ -71,19 +71,19 @@ def vikor(df, id_col, criteria, weights_dict, benefit_dict, v=0.5):
     out["VIKOR_R"] = R
     out["VIKOR_Q"] = Q
     out["VIKOR_Rank"] = out["VIKOR_Q"].rank(method="min").astype(int)
-    return out.sort_values("VIKOR_Q")
+    return out.sort_values("VIKOR_Q").reset_index(drop=True)
 
 def chart_vikor(df, id_col):
     df_plot = df.copy()
-    # Create a unique label for Y-axis to avoid duplicates or NaNs
-    df_plot["ID_unique"] = df_plot[id_col].astype(str) + " (" + df_plot.index.astype(str) + ")"
+    # Make a truly unique label for Y-axis
+    df_plot["Y_label"] = df_plot[id_col].astype(str) + " (" + df_plot.index.astype(str) + ")"
     df_plot = df_plot.sort_values("VIKOR_Q", ascending=True)
     chart = (
         alt.Chart(df_plot)
         .mark_bar()
         .encode(
             x=alt.X("VIKOR_Q:Q", title="VIKOR Q (lower is better)"),
-            y=alt.Y("ID_unique:N", sort='-x', title=id_col),
+            y=alt.Y("Y_label:N", sort='-x', title=id_col),
             tooltip=[alt.Tooltip(id_col), "VIKOR_S:Q", "VIKOR_R:Q", "VIKOR_Q:Q", "VIKOR_Rank:Q"]
         )
         .properties(height=420)
@@ -148,7 +148,7 @@ v_param = st.slider("VIKOR v (strategy of majority)", 0.0, 1.0, 0.5, 0.05)
 # Run VIKOR
 st.markdown("---")
 if st.button("🚀 Run VIKOR"):
-    df_work = df_num[[id_col] + criteria].dropna()
+    df_work = df_num[[id_col] + criteria].dropna().reset_index(drop=True)
     vikor_df = vikor(df_work, id_col, criteria, weights, benefit_flags, v=v_param)
     st.subheader("VIKOR Results")
     st.dataframe(vikor_df, use_container_width=True)
