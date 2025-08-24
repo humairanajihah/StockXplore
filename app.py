@@ -75,14 +75,15 @@ def vikor(df, id_col, criteria, weights_dict, benefit_dict, v=0.5):
 
 def chart_vikor(df, id_col):
     df_plot = df.copy()
-    df_plot[id_col] = df_plot[id_col].astype(str)  # Ensure categorical
+    # Create a unique label for Y-axis to avoid duplicates or NaNs
+    df_plot["ID_unique"] = df_plot[id_col].astype(str) + " (" + df_plot.index.astype(str) + ")"
     df_plot = df_plot.sort_values("VIKOR_Q", ascending=True)
     chart = (
         alt.Chart(df_plot)
         .mark_bar()
         .encode(
             x=alt.X("VIKOR_Q:Q", title="VIKOR Q (lower is better)"),
-            y=alt.Y(f"{id_col}:N", sort='-x', title=id_col),
+            y=alt.Y("ID_unique:N", sort='-x', title=id_col),
             tooltip=[alt.Tooltip(id_col), "VIKOR_S:Q", "VIKOR_R:Q", "VIKOR_Q:Q", "VIKOR_Rank:Q"]
         )
         .properties(height=420)
@@ -138,7 +139,6 @@ cols = st.columns(min(4, len(criteria)))
 for i, c in enumerate(criteria):
     with cols[i % len(cols)]:
         weights[c] = st.number_input(f"Weight: {c}", min_value=0.0, value=1.0, step=0.1, key=f"w_{c}")
-
 st.caption(f"Total weight (auto-normalized): **{sum(weights.values()):.2f}**")
 
 # Step 5 — VIKOR Parameter
