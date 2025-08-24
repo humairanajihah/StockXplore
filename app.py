@@ -41,20 +41,18 @@ def coerce_numeric(df, cols):
 def normalize_for_vikor(X, benefit_flags):
     m, n = X.shape
     D = np.zeros_like(X, dtype=float)
-    f_star = np.zeros(n, dtype=float)
-    f_minus = np.zeros(n, dtype=float)
     for j in range(n):
         col = X[:, j].astype(float)
         if benefit_flags[j]:
-            f_star[j] = np.nanmax(col)
-            f_minus[j] = np.nanmin(col)
-            denom = f_star[j] - f_minus[j]
-            D[:, j] = 0 if denom == 0 else (f_star[j] - col) / denom
+            f_star = np.nanmax(col)
+            f_minus = np.nanmin(col)
+            denom = f_star - f_minus
+            D[:, j] = 0 if denom == 0 else (f_star - col) / denom
         else:
-            f_star[j] = np.nanmin(col)
-            f_minus[j] = np.nanmax(col)
-            denom = f_minus[j] - f_star[j]
-            D[:, j] = 0 if denom == 0 else (col - f_star[j]) / denom
+            f_star = np.nanmin(col)
+            f_minus = np.nanmax(col)
+            denom = f_minus - f_star
+            D[:, j] = 0 if denom == 0 else (col - f_star) / denom
     return D
 
 def vikor(df, id_col, criteria, weights_dict, benefit_dict, v=0.5):
@@ -76,8 +74,11 @@ def vikor(df, id_col, criteria, weights_dict, benefit_dict, v=0.5):
     return out.sort_values("VIKOR_Q")
 
 def chart_vikor(df, id_col):
+    df_plot = df.copy()
+    df_plot[id_col] = df_plot[id_col].astype(str)  # Ensure categorical
+    df_plot = df_plot.sort_values("VIKOR_Q", ascending=True)
     chart = (
-        alt.Chart(df.sort_values("VIKOR_Q", ascending=True))
+        alt.Chart(df_plot)
         .mark_bar()
         .encode(
             x=alt.X("VIKOR_Q:Q", title="VIKOR Q (lower is better)"),
@@ -97,10 +98,10 @@ def download_csv(df, filename):
 # ===============================
 with st.sidebar:
     st.title("📈 StockXplore • VIKOR")
-    st.markdown("Upload your dataset, select ID/criteria, set weights, and run VIKOR.")
+    st.markdown("Upload dataset, select ID & criteria, set weights, and run VIKOR.")
 
 # ===============================
-# Main
+# Main App
 # ===============================
 # Step 1 — Load Data
 st.header("Step 1 — Load Data")
@@ -140,7 +141,7 @@ for i, c in enumerate(criteria):
 
 st.caption(f"Total weight (auto-normalized): **{sum(weights.values()):.2f}**")
 
-# Step 5 — VIKOR parameter
+# Step 5 — VIKOR Parameter
 st.subheader("Step 4 — VIKOR Parameter")
 v_param = st.slider("VIKOR v (strategy of majority)", 0.0, 1.0, 0.5, 0.05)
 
