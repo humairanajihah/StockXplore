@@ -28,27 +28,28 @@ if uploaded_file:
 else:
     df = load_sample_data()
 
+# -----------------------------
+# Ensure alternatives column
+# -----------------------------
+if "Alternative" not in df.columns:
+    df.insert(0, "Alternative", [f"A{i+1}" for i in range(len(df))])
+
 st.subheader("Data Preview")
 st.dataframe(df)
 
 # -----------------------------
-# Keep only numeric columns
+# Keep only numeric columns for criteria
 # -----------------------------
-df = df.apply(pd.to_numeric, errors="coerce")
 numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-if not numeric_cols:
-    st.error("No numeric columns found. Please upload valid data.")
-    st.stop()
-
 criteria = st.multiselect("Select criteria", numeric_cols, default=numeric_cols)
 if not criteria:
-    st.error("Please select at least one criterion.")
+    st.error("Please select at least one numeric criterion.")
     st.stop()
 
-# Drop rows where all criteria are NaN
-df = df.dropna(subset=criteria, how="all")
+# Drop rows with NaN in selected criteria
+df = df.dropna(subset=criteria)
 if df.empty:
-    st.error("No valid data left after removing NaN rows.")
+    st.error("No valid data left after dropping rows with NaN.")
     st.stop()
 
 # -----------------------------
@@ -56,9 +57,6 @@ if df.empty:
 # -----------------------------
 def vikor(df, criteria, weights=None, benefit=None, v=0.5):
     X = df[criteria].astype(float).values
-    if X.size == 0:
-        raise ValueError("Input matrix has zero size.")
-
     n, m = X.shape
 
     if weights is None:
@@ -93,7 +91,7 @@ def vikor(df, criteria, weights=None, benefit=None, v=0.5):
     df_vikor["VIKOR_R"] = R
     df_vikor["VIKOR_Q"] = Q
     df_vikor["Rank"] = Q.argsort() + 1
-    return df_vikor.sort_values("VIKOR_Q")
+    return df_vikor.sort_values("VIKOR_Q").reset_index(drop=True)
 
 # -----------------------------
 # Weights & Benefit/Cost Inputs
@@ -116,14 +114,17 @@ if st.button("Run VIKOR"):
         st.subheader("VIKOR Result")
         st.dataframe(df_result)
 
+        # Show best alternative
+        best_alt = df_result.iloc[0]["Alternative"]
+        st.success(f"🏆 Best Alternative: {best_alt}")
+
         # -----------------------------
         # Horizontal bar chart by rank
         # -----------------------------
-        df_chart = df_result.reset_index(drop=True)
-        chart = alt.Chart(df_chart).mark_bar().encode(
-            y=alt.Y("Rank:O", sort="ascending", title="Rank"),
+        chart = alt.Chart(df_result).mark_bar().encode(
+            y=alt.Y("Alternative:N", sort=df_result["Alternative"].tolist(), title="Alternative"),
             x=alt.X("VIKOR_Q:Q", title="VIKOR Q (lower is better)"),
-            tooltip=[alt.Tooltip(c) for c in criteria] + ["VIKOR_Q", "Rank"]
+            tooltip=["Alternative"] + criteria + ["VIKOR_Q", "Rank"]
         ).properties(height=400, title="VIKOR Ranking")
         st.altair_chart(chart, use_container_width=True)
 
