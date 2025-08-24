@@ -20,7 +20,7 @@ def load_sample_data(n=10):
     return pd.DataFrame(data)
 
 # -----------------------------
-# Upload CSV
+# File Upload
 # -----------------------------
 uploaded_file = st.file_uploader("Upload CSV", type="csv")
 if uploaded_file:
@@ -31,10 +31,13 @@ else:
 st.subheader("Data Preview")
 st.dataframe(df)
 
-# Only numeric columns
+# -----------------------------
+# Keep only numeric columns
+# -----------------------------
+df = df.apply(pd.to_numeric, errors="coerce")
 numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
 if not numeric_cols:
-    st.error("No numeric columns found. Please upload a valid CSV with numeric criteria.")
+    st.error("No numeric columns found. Please upload valid data.")
     st.stop()
 
 criteria = st.multiselect("Select criteria", numeric_cols, default=numeric_cols)
@@ -42,14 +45,20 @@ if not criteria:
     st.error("Please select at least one criterion.")
     st.stop()
 
+# Drop rows where all criteria are NaN
+df = df.dropna(subset=criteria, how="all")
+if df.empty:
+    st.error("No valid data left after removing NaN rows.")
+    st.stop()
+
 # -----------------------------
-# VIKOR Calculation
+# VIKOR Function
 # -----------------------------
 def vikor(df, criteria, weights=None, benefit=None, v=0.5):
     X = df[criteria].astype(float).values
     if X.size == 0:
-        raise ValueError("Input matrix has zero size. Check selected criteria and data.")
-    
+        raise ValueError("Input matrix has zero size.")
+
     n, m = X.shape
 
     if weights is None:
@@ -77,8 +86,8 @@ def vikor(df, criteria, weights=None, benefit=None, v=0.5):
     R = np.max(D * weights, axis=1)
     S_star, S_minus = S.min(), S.max()
     R_star, R_minus = R.min(), R.max()
-
     Q = v*(S - S_star)/(S_minus - S_star + 1e-9) + (1-v)*(R - R_star)/(R_minus - R_star + 1e-9)
+
     df_vikor = df.copy()
     df_vikor["VIKOR_S"] = S
     df_vikor["VIKOR_R"] = R
@@ -87,11 +96,11 @@ def vikor(df, criteria, weights=None, benefit=None, v=0.5):
     return df_vikor.sort_values("VIKOR_Q")
 
 # -----------------------------
-# Inputs: Weights & Benefit/Cost
+# Weights & Benefit/Cost Inputs
 # -----------------------------
+st.subheader("Weights & Benefit/Cost")
 weights = {}
 benefit = {}
-st.subheader("Weights & Benefit/Cost")
 for c in criteria:
     weights[c] = st.number_input(f"Weight for {c}", min_value=0.0, value=1.0, step=0.1)
     benefit[c] = st.radio(f"{c} type", ["Benefit (higher better)", "Cost (lower better)"], index=0).startswith("Benefit")
@@ -108,14 +117,14 @@ if st.button("Run VIKOR"):
         st.dataframe(df_result)
 
         # -----------------------------
-        # Chart by Rank
+        # Horizontal bar chart by rank
         # -----------------------------
         df_chart = df_result.reset_index(drop=True)
         chart = alt.Chart(df_chart).mark_bar().encode(
-            x=alt.X("VIKOR_Q:Q", title="VIKOR Q (lower is better)"),
             y=alt.Y("Rank:O", sort="ascending", title="Rank"),
-            tooltip=[alt.Tooltip(c, title=c) for c in criteria] + ["VIKOR_Q", "Rank"]
-        ).properties(height=400, title="VIKOR Ranking Chart")
+            x=alt.X("VIKOR_Q:Q", title="VIKOR Q (lower is better)"),
+            tooltip=[alt.Tooltip(c) for c in criteria] + ["VIKOR_Q", "Rank"]
+        ).properties(height=400, title="VIKOR Ranking")
         st.altair_chart(chart, use_container_width=True)
 
     except Exception as e:
