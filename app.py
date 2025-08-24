@@ -4,6 +4,25 @@ import numpy as np
 import matplotlib.pyplot as plt
 import plotly.express as px
 
+st.title("📊 StockXplore: VIKOR Stock Ranking System")
+
+# -----------------------------
+# App description
+# -----------------------------
+st.markdown("""
+## 🌱 StockXplore: Sustainable Stock Ranking
+This app applies the **VIKOR (VlseKriterijumska Optimizacija I Kompromisno Resenje)** method to rank stock alternatives based on multiple criteria.
+
+### How It Works:
+1. **Upload a dataset** (CSV/Excel) with alternatives and numerical criteria.
+2. **Set weights** for each criterion and **mark them as benefit or cost**.
+3. **Adjust the VIKOR compromise factor (v)** if desired.
+4. **View the ranking**, download the results, and see interactive/static bar charts.
+
+> The lower the Q value, the better the alternative.
+""")
+
+
 st.set_page_config(page_title="StockXplore VIKOR", layout="wide")
 st.title("📊 StockXplore: VIKOR Stock Ranking System")
 
