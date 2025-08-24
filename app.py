@@ -6,7 +6,7 @@ import altair as alt
 st.title("StockXplore VIKOR System")
 
 # -----------------------------
-# Sample Data
+# Load Sample Data
 # -----------------------------
 def load_sample_data(n=10):
     np.random.seed(42)
@@ -20,7 +20,7 @@ def load_sample_data(n=10):
     return pd.DataFrame(data)
 
 # -----------------------------
-# Load CSV or sample
+# Upload CSV
 # -----------------------------
 uploaded_file = st.file_uploader("Upload CSV", type="csv")
 if uploaded_file:
@@ -31,18 +31,25 @@ else:
 st.subheader("Data Preview")
 st.dataframe(df)
 
+# Only numeric columns
 numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-if len(numeric_cols) == 0:
-    st.error("No numeric columns available.")
+if not numeric_cols:
+    st.error("No numeric columns found. Please upload a valid CSV with numeric criteria.")
     st.stop()
 
 criteria = st.multiselect("Select criteria", numeric_cols, default=numeric_cols)
+if not criteria:
+    st.error("Please select at least one criterion.")
+    st.stop()
 
 # -----------------------------
-# VIKOR Function
+# VIKOR Calculation
 # -----------------------------
 def vikor(df, criteria, weights=None, benefit=None, v=0.5):
     X = df[criteria].astype(float).values
+    if X.size == 0:
+        raise ValueError("Input matrix has zero size. Check selected criteria and data.")
+    
     n, m = X.shape
 
     if weights is None:
@@ -80,7 +87,7 @@ def vikor(df, criteria, weights=None, benefit=None, v=0.5):
     return df_vikor.sort_values("VIKOR_Q")
 
 # -----------------------------
-# Weights and benefit/cost
+# Inputs: Weights & Benefit/Cost
 # -----------------------------
 weights = {}
 benefit = {}
@@ -101,15 +108,15 @@ if st.button("Run VIKOR"):
         st.dataframe(df_result)
 
         # -----------------------------
-        # Chart
+        # Chart by Rank
         # -----------------------------
-        df_chart = df_result.reset_index()
+        df_chart = df_result.reset_index(drop=True)
         chart = alt.Chart(df_chart).mark_bar().encode(
-            x=alt.X("VIKOR_Q:Q", title="VIKOR Q"),
+            x=alt.X("VIKOR_Q:Q", title="VIKOR Q (lower is better)"),
             y=alt.Y("Rank:O", sort="ascending", title="Rank"),
-            tooltip=list(df_chart.columns)
-        ).properties(height=400, title="VIKOR Q by Rank")
+            tooltip=[alt.Tooltip(c, title=c) for c in criteria] + ["VIKOR_Q", "Rank"]
+        ).properties(height=400, title="VIKOR Ranking Chart")
         st.altair_chart(chart, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"❌ Error: {e}")
