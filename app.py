@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly.express as px
 
 st.set_page_config(page_title="StockXplore VIKOR", layout="wide")
 st.title("📊 StockXplore: VIKOR Stock Ranking System")
@@ -16,10 +17,7 @@ if uploaded_file:
     st.subheader("📁 Raw Data")
     st.dataframe(df)
 
-    # -----------------------------
     # Auto-detect name column
-    # -----------------------------
-    # Pick first non-numeric column as Name
     name_col = None
     for col in df.columns:
         if not pd.api.types.is_numeric_dtype(df[col]):
@@ -63,7 +61,6 @@ if uploaded_file:
     # Step 4: Compute VIKOR
     # -----------------------------
     df_numeric = df[[name_col] + criteria].copy()
-
     X = df_numeric[criteria].values.astype(float)
     m, n = X.shape
     D = np.zeros_like(X)
@@ -106,18 +103,53 @@ if uploaded_file:
     st.dataframe(df_result)
 
     # -----------------------------
-    # Bar chart of Q values
+    # Chart selection
     # -----------------------------
-    st.subheader("📊 Q Value Ranking Chart")
-    plt.figure(figsize=(10, 6))
-    plt.bar(df_result[name_col], df_result["Q"], color='skyblue')
-    plt.xlabel("Alternative")
-    plt.ylabel("Q Value")
-    plt.title("VIKOR Ranking Based on Q Values (Lower is Better)")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    st.pyplot(plt)
+    st.subheader("📊 Q Value Ranking Chart Options")
+    chart_type = st.radio("Choose chart type:", ["Matplotlib (Static)", "Plotly (Interactive)"])
+    top_n = st.number_input("Show top N alternatives (for readability, 0 = show all)", min_value=0, value=100, step=10)
+
+    if top_n > 0:
+        plot_df = df_result.nsmallest(top_n, "Q")
+    else:
+        plot_df = df_result
+
+    if chart_type == "Matplotlib (Static)":
+        plt.figure(figsize=(12, 6))
+        plt.bar(plot_df[name_col], plot_df["Q"], color='skyblue')
+        plt.xlabel("Alternative")
+        plt.ylabel("Q Value")
+        plt.title("VIKOR Ranking Based on Q Values (Lower is Better)")
+
+        step = max(1, len(plot_df)//50)  # show ~50 labels max
+        plt.xticks(ticks=range(0, len(plot_df), step), labels=plot_df[name_col][::step], rotation=90)
+
+        plt.tight_layout()
+        st.pyplot(plt)
+
+    else:  # Plotly interactive
+        fig = px.bar(
+            plot_df,
+            x=name_col,
+            y="Q",
+            hover_data=criteria + ["S", "R", "Q", "Rank"],
+            color="Q",
+            color_continuous_scale="Blues",
+            title="VIKOR Ranking Based on Q Values (Lower is Better)"
+        )
+
+        if len(plot_df) > 50:
+            fig.update_layout(xaxis=dict(showticklabels=False))
+
+        fig.update_layout(
+            xaxis_title="Alternative",
+            yaxis_title="Q Value",
+            coloraxis_colorbar=dict(title="Q"),
+            margin=dict(l=40, r=40, t=60, b=40),
+            height=500
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
 
 else:
     st.info("Please upload a CSV file to start.")
-
